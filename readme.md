@@ -4,8 +4,6 @@ I built this because I needed a resampler that was **fast, principled, and uncom
 TorchLanc is for anyone who cares about the details:
 true anti-aliasing, gamma-correct math, and GPU-ready speed; all in a single, self-contained module you can drop straight into your project.
 
----
-
 ## **Features**
 
 ### **Resizing Done Right: Sinc and Lanczos**
