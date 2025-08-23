@@ -23,6 +23,7 @@ venv/
 
 # TorchLanc specific
 .cache/
+*/.cache/
 
 # IDE / Editor specific
 .idea/
