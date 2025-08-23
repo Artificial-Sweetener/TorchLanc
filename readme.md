@@ -189,3 +189,16 @@ If you care about:
 Fast. Principled. Beautiful.
 
  - ArtificialSweetener
+
+## Personal Benchmark Results
+
+<img width="1080" height="1210" alt="comparison_batch_1_downscale" src="https://github.com/user-attachments/assets/c6b24327-5cdf-4624-8fc9-93d8e5bc42f5" />
+<img width="1080" height="1210" alt="comparison_batch_8_downscale" src="https://github.com/user-attachments/assets/d44661de-a8ba-4d4a-8886-ce6a376be24e" />
+<img width="1080" height="1210" alt="comparison_batch_24_downscale" src="https://github.com/user-attachments/assets/412372ee-26ee-404c-b868-c03ecd56b7ca" />
+<img width="1080" height="1210" alt="comparison_batch_48_downscale" src="https://github.com/user-attachments/assets/503dacd4-5f8a-4fc5-81c8-ce37c57bf71e" />
+<img width="4320" height="4761" alt="comparison_batch_1_upscale" src="https://github.com/user-attachments/assets/b884b897-8cd2-42e0-a4c3-374023e18c80" />
+<img width="4320" height="4761" alt="comparison_batch_8_upscale" src="https://github.com/user-attachments/assets/bac57210-d872-4fed-b620-9d3f1788bdd7" />
+<img width="4320" height="4761" alt="comparison_batch_24_upscale" src="https://github.com/user-attachments/assets/38ce82ee-1d13-4f84-848e-1a3148052536" /><img width="4320" height="4761" alt="comparison_batch_48_upscale" src="https://github.com/user-attachments/assets/05f80b6a-e502-471e-b4d4-bf990c0bafd2" />
+<img width="3240" height="1976" alt="comparison_visual_downscale" src="https://github.com/user-attachments/assets/82be520f-6845-4a30-b019-d605ac2a7bc5" />
+<img width="6480" height="3941" alt="comparison_visual_upscale" src="https://github.com/user-attachments/assets/5f820ef9-b21d-4b1b-a188-3df3d1046446" />
+
