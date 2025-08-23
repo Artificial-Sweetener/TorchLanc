@@ -94,12 +94,15 @@ def create_label_image(lines, width, *, font_ratio=0.03125, font_name=None):
         if line.strip().startswith("Cache Hit"):
             drawn_bbox = draw.textbbox((x, y), line, font=font)
             underline_y = drawn_bbox[3] + 2
-            draw.line([(drawn_bbox[0], underline_y), (drawn_bbox[2], underline_y)], fill="red", width=2)
+            draw.line(
+                [(drawn_bbox[0], underline_y), (drawn_bbox[2], underline_y)],
+                fill="red",
+                width=2,
+            )
 
         y += line_height
 
     return img
-
 
 
 def create_visual_comparison(
@@ -113,7 +116,6 @@ def create_visual_comparison(
     *,
     font_ratio=0.03125,
 ):
-
     """Creates a 3-panel side-by-side image for visual quality comparison."""
     print(f"Creating visual comparison image for {operation}...")
 
@@ -145,9 +147,13 @@ def create_visual_comparison(
         pillow_panel = pillow_pil
 
     # Create labels whose font scales with the actual rendered panel width
-    label_original  = create_label_image(["Original"], panel_w, font_ratio=font_ratio)
-    label_torchlanc = create_label_image([f"TorchLanc {scale_factor}x"], panel_w, font_ratio=font_ratio)
-    label_pillow    = create_label_image([f"Pillow {scale_factor}x"], panel_w, font_ratio=font_ratio)
+    label_original = create_label_image(["Original"], panel_w, font_ratio=font_ratio)
+    label_torchlanc = create_label_image(
+        [f"TorchLanc {scale_factor}x"], panel_w, font_ratio=font_ratio
+    )
+    label_pillow = create_label_image(
+        [f"Pillow {scale_factor}x"], panel_w, font_ratio=font_ratio
+    )
     label_height = label_original.height
 
     # Assemble the final image
@@ -239,16 +245,21 @@ def run_race_test(device, test_config, cpu_name, gpu_name, *, font_ratio=0.03125
 
     # --- Report Times ---
     print(f"\n--- RESULTS FOR BATCH SIZE: {batch_size} ({operation.upper()}) ---")
-    print(f"TorchLanc (Cache Miss): {duration_miss_ms:.2f}ms total ({duration_miss_ms/batch_size:.2f}ms/img)")
-    print(f"TorchLanc (Cache Hit):  {duration_hit_ms:.2f}ms total ({duration_hit_ms/batch_size:.2f}ms/img)")
-    print(f"Pillow (CPU):           {pil_duration_ms:.2f}ms total ({pil_duration_ms/batch_size:.2f}ms/img)")
+    print(
+        f"TorchLanc (Cache Miss): {duration_miss_ms:.2f}ms total ({duration_miss_ms/batch_size:.2f}ms/img)"
+    )
+    print(
+        f"TorchLanc (Cache Hit):  {duration_hit_ms:.2f}ms total ({duration_hit_ms/batch_size:.2f}ms/img)"
+    )
+    print(
+        f"Pillow (CPU):           {pil_duration_ms:.2f}ms total ({pil_duration_ms/batch_size:.2f}ms/img)"
+    )
 
     # Relative vs TorchLanc cache-hit
     eps = 1e-9
     rel = (pil_duration_ms / max(duration_hit_ms, eps) - 1.0) * 100.0
     direction = "slower" if rel >= 0 else "faster"
     print(f"Pillow was {abs(rel):.1f}% {direction}")
-
 
     # --- Create and Save Benchmark Comparison Image ---
     print("\nCreating side-by-side benchmark image...")
@@ -273,16 +284,18 @@ def run_race_test(device, test_config, cpu_name, gpu_name, *, font_ratio=0.03125
         f"Pillow was {abs(rel):.1f}% {direction}",
     ]
 
-
     total_width = output_width * 2
 
-    our_label = create_label_image(our_label_lines, width=output_width, font_ratio=font_ratio)
-    pil_label = create_label_image(pil_label_lines, width=output_width, font_ratio=font_ratio)
+    our_label = create_label_image(
+        our_label_lines, width=output_width, font_ratio=font_ratio
+    )
+    pil_label = create_label_image(
+        pil_label_lines, width=output_width, font_ratio=font_ratio
+    )
 
     info_lines = [op_details, f"GPU: {gpu_name}", f"CPU: {cpu_name}"]
     info_label = create_label_image(info_lines, total_width, font_ratio=font_ratio)
     info_height = info_label.height
-
 
     label_height = our_label.height
     total_height_bench = output_height + label_height + info_height
@@ -322,7 +335,6 @@ def run_race_test(device, test_config, cpu_name, gpu_name, *, font_ratio=0.03125
         operation=operation,
         font_ratio=font_ratio,
     )
-
 
 
 def run_self_test(device, test_config):
@@ -367,14 +379,39 @@ def run_self_test(device, test_config):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Benchmarking tests for TorchLanc.")
-    parser.add_argument("--self", action="store_true", help="Run TorchLanc self-benchmark using cache.")
-    parser.add_argument("--race", action="store_true", help="Run TorchLanc vs. Pillow race.")
-    parser.add_argument("--batch", type=int, default=None, help="Override batch size for --self (e.g., 256).")
-    parser.add_argument("--op", choices=["downscale", "upscale"], default=None, help="Operation for --self override.")
-    parser.add_argument("--cache-dir", type=str, default=None, help="Cache dir to use (default: tests/.cache).")
-    parser.add_argument("--font-ratio", type=float, default=0.03125, help="Font size as fraction of panel width (default 0.03125 ≈ 3.125%).")
-    parser.add_argument("--cpu-only", action="store_true", help="Force CPU even if CUDA is available.")
-
+    parser.add_argument(
+        "--self", action="store_true", help="Run TorchLanc self-benchmark using cache."
+    )
+    parser.add_argument(
+        "--race", action="store_true", help="Run TorchLanc vs. Pillow race."
+    )
+    parser.add_argument(
+        "--batch",
+        type=int,
+        default=None,
+        help="Override batch size for --self (e.g., 256).",
+    )
+    parser.add_argument(
+        "--op",
+        choices=["downscale", "upscale"],
+        default=None,
+        help="Operation for --self override.",
+    )
+    parser.add_argument(
+        "--cache-dir",
+        type=str,
+        default=None,
+        help="Cache dir to use (default: tests/.cache).",
+    )
+    parser.add_argument(
+        "--font-ratio",
+        type=float,
+        default=0.03125,
+        help="Font size as fraction of panel width (default 0.03125 ≈ 3.125%).",
+    )
+    parser.add_argument(
+        "--cpu-only", action="store_true", help="Force CPU even if CUDA is available."
+    )
 
     # Expand shorthands like: --self-256  or  --self-256-upscale
     argv = sys.argv[1:]
@@ -394,10 +431,11 @@ if __name__ == "__main__":
         parser.print_help()
         exit()
 
-
     # --- SYSTEM INFORMATION ---
     print("--- SYSTEM INFORMATION ---")
-    device = torch.device("cpu" if args.cpu_only else ("cuda" if torch.cuda.is_available() else "cpu"))
+    device = torch.device(
+        "cpu" if args.cpu_only else ("cuda" if torch.cuda.is_available() else "cpu")
+    )
     print(f"Device: {device}")
 
     gpu_name = "N/A"
@@ -413,14 +451,13 @@ if __name__ == "__main__":
         cpu_name = platform.processor()
         print(f"CPU: {cpu_name} (install py-cpuinfo for details)")
 
-
     # --- Test-local cache directory ---
     script_dir = os.path.dirname(__file__)
     cache_dir = args.cache_dir or os.path.join(script_dir, ".cache")
     set_cache_dir(cache_dir, reload_from_disk=True)
 
     # --- Test Configurations ---
-    batch_sizes_race = [1, 8, 24, 48, 64]            # 128 removed (Pillow can crash)
+    batch_sizes_race = [1, 8, 24, 48, 64]  # 128 removed (Pillow can crash)
     batch_sizes_self = [1, 8, 24, 48, 64, 128, 256]  # 256 added for stress
 
     downscale_config_base = {
@@ -460,8 +497,13 @@ if __name__ == "__main__":
 
                 current_config = config_base.copy()
                 current_config["batch_size"] = batch
-                run_race_test(device, current_config, cpu_name, gpu_name, font_ratio=args.font_ratio)
-
+                run_race_test(
+                    device,
+                    current_config,
+                    cpu_name,
+                    gpu_name,
+                    font_ratio=args.font_ratio,
+                )
 
     if args.self:
         # --- Run Self-Test Series ---
@@ -489,13 +531,17 @@ if __name__ == "__main__":
         if args.op is None:
             ops = [downscale_config_base, upscale_config_base]
         else:
-            ops = [downscale_config_base if args.op == "downscale" else upscale_config_base]
+            ops = [
+                downscale_config_base if args.op == "downscale" else upscale_config_base
+            ]
 
         # Determine batches: override or default list
         batches = [args.batch] if args.batch is not None else batch_sizes_self
 
         for config_base in ops:
-            print(f"\n--- BENCHMARKING {config_base['operation'].upper()} (CACHE-ASSISTED) ---")
+            print(
+                f"\n--- BENCHMARKING {config_base['operation'].upper()} (CACHE-ASSISTED) ---"
+            )
             for batch in batches:
                 current_config = config_base.copy()
                 current_config["batch_size"] = int(batch)

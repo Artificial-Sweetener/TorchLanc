@@ -2,6 +2,7 @@ import pytest
 import torch
 from torchlanc import lanczos_resize
 
+
 @pytest.fixture
 def checkerboard_tensor():
     """
@@ -13,6 +14,7 @@ def checkerboard_tensor():
     tensor[:, :, 2:4, 2:4] = 1.0
     return tensor
 
+
 def test_upscale(checkerboard_tensor):
     """
     Tests if upscaling to double the size produces the correct shape and dtype.
@@ -21,6 +23,7 @@ def test_upscale(checkerboard_tensor):
     assert output.shape == (1, 1, 8, 8)
     assert output.dtype == checkerboard_tensor.dtype
 
+
 def test_downscale(checkerboard_tensor):
     """
     Tests if downscaling to half the size produces the correct shape and dtype.
@@ -28,6 +31,7 @@ def test_downscale(checkerboard_tensor):
     output = lanczos_resize(checkerboard_tensor, height=2, width=2)
     assert output.shape == (1, 1, 2, 2)
     assert output.dtype == checkerboard_tensor.dtype
+
 
 def test_identity_resize(checkerboard_tensor):
     """
@@ -38,6 +42,7 @@ def test_identity_resize(checkerboard_tensor):
     assert output.shape == checkerboard_tensor.shape
     assert torch.allclose(output, checkerboard_tensor, atol=1e-6)
 
+
 def test_invalid_input_shape():
     """
     Tests that a ValueError is raised for inputs that are not 4D tensors.
@@ -46,13 +51,17 @@ def test_invalid_input_shape():
         tensor_3d = torch.randn(3, 256, 256)
         lanczos_resize(tensor_3d, height=128, width=128)
 
+
 def test_invalid_channel_count():
     """
     Tests that a ValueError is raised for unsupported channel counts (e.g., 2).
     """
-    with pytest.raises(ValueError, match="Input must be a 4D tensor .* with 1, 3, or 4 channels"):
+    with pytest.raises(
+        ValueError, match="Input must be a 4D tensor .* with 1, 3, or 4 channels"
+    ):
         tensor_invalid_channels = torch.randn(1, 2, 32, 32)
         lanczos_resize(tensor_invalid_channels, height=64, width=64)
+
 
 def test_non_floating_point_input():
     """
@@ -61,6 +70,7 @@ def test_non_floating_point_input():
     with pytest.raises(ValueError, match="Input tensor must be floating point"):
         tensor_int = torch.randint(0, 255, (1, 3, 32, 32), dtype=torch.uint8)
         lanczos_resize(tensor_int, height=64, width=64)
+
 
 def test_alpha_channel_handling():
     """

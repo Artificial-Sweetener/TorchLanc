@@ -121,14 +121,15 @@ def _atomic_replace(src: pathlib.Path, dst: pathlib.Path) -> None:
 def _save_memory_profile_cache() -> None:
     try:
         os.makedirs(_cache_dir, exist_ok=True)
-        tmp = _memory_profile_cache_file.with_suffix(_memory_profile_cache_file.suffix + ".tmp")
+        tmp = _memory_profile_cache_file.with_suffix(
+            _memory_profile_cache_file.suffix + ".tmp"
+        )
         payload = {"version": 2, "profiles": _memory_profile_cache}
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
         _atomic_replace(tmp, _memory_profile_cache_file)
     except Exception as e:
         logger.error(f"Memory profile cache: Could not save. Error: {e}")
-
 
 
 def _load_memory_profile_cache() -> None:
@@ -164,18 +165,23 @@ def _load_memory_profile_cache() -> None:
                     out = v
                 migrated[k] = out
             _memory_profile_cache = migrated
-            logger.info(f"Memory profile cache: Migrated {len(_memory_profile_cache)} entries to v2.")
+            logger.info(
+                f"Memory profile cache: Migrated {len(_memory_profile_cache)} entries to v2."
+            )
             # Persist the migrated data as v2
             _save_memory_profile_cache()
             return
 
         # v2 already
         _memory_profile_cache = profiles
-        logger.info(f"Memory profile cache: Loaded {len(_memory_profile_cache)} entries.")
+        logger.info(
+            f"Memory profile cache: Loaded {len(_memory_profile_cache)} entries."
+        )
     except Exception as e:
-        logger.warning(f"Memory profile cache: Could not load. Starting fresh. Error: {e}")
+        logger.warning(
+            f"Memory profile cache: Could not load. Starting fresh. Error: {e}"
+        )
         _memory_profile_cache = {}
-
 
 
 def _save_cache() -> None:
@@ -261,8 +267,16 @@ def _get_device_identifier() -> str:
     except Exception:
         return "cpu_generic"
 
+
 def _suggest_chunk_rows(
-    b: int, c: int, in_h: int, in_w: int, out_h: int, out_w: int, a: int, device: torch.device
+    b: int,
+    c: int,
+    in_h: int,
+    in_w: int,
+    out_h: int,
+    out_w: int,
+    a: int,
+    device: torch.device,
 ) -> int:
     """
     Suggest a conservative row-chunk for _resample_1d_jit based on current free VRAM.
@@ -342,7 +356,7 @@ def _resample_1d_jit(
     dim: int,
     chunk_size: int,
     weights: torch.Tensor,
-    clamped_indices: torch.Tensor
+    clamped_indices: torch.Tensor,
 ) -> torch.Tensor:
     tensor_reshaped = tensor.movedim(dim, -1)
     original_shape = tensor_reshaped.shape
@@ -353,7 +367,9 @@ def _resample_1d_jit(
         gathered_pixels = tensor_flat[:, clamped_indices]
         resampled_flat = (gathered_pixels * weights.unsqueeze(0)).sum(dim=-1)
     else:
-        resampled_flat = torch.empty((num_rows, out_size), device=tensor_flat.device, dtype=tensor_flat.dtype)
+        resampled_flat = torch.empty(
+            (num_rows, out_size), device=tensor_flat.device, dtype=tensor_flat.dtype
+        )
         num_chunks = (num_rows + chunk_size - 1) // chunk_size
         w0 = weights.unsqueeze(0)
         for i in range(num_chunks):
@@ -366,7 +382,6 @@ def _resample_1d_jit(
     new_shape = list(original_shape)
     new_shape[-1] = out_size
     return resampled_flat.reshape(new_shape).movedim(-1, dim)
-
 
 
 def resample_1d(
@@ -511,7 +526,9 @@ def _lanczos_resize_core(
     # linear -> sRGB in float32; stream slice-by-slice to avoid large temporaries
     b, c, h, w = resized_linear_rgb.shape
     bytes_per_img_f32 = c * h * w * 4  # gamma math in fp32
-    budget = 256 * 1024 * 1024 if image_tensor.device.type == "cuda" else 1024 * 1024 * 1024
+    budget = (
+        256 * 1024 * 1024 if image_tensor.device.type == "cuda" else 1024 * 1024 * 1024
+    )
     gamma_chunk_size = max(1, min(b, int(budget // max(1, bytes_per_img_f32))))
 
     if resized_linear_rgb.dtype == torch.float32:
@@ -529,18 +546,20 @@ def _lanczos_resize_core(
     else:
         # Compute gamma in fp32 per slice, then store back in compute dtype to keep memory bounded.
         if gamma_chunk_size >= b:
-            out_slice = linear_to_srgb(resized_linear_rgb.to(torch.float32), clamp=clamp)
+            out_slice = linear_to_srgb(
+                resized_linear_rgb.to(torch.float32), clamp=clamp
+            )
             resized_linear_rgb.copy_(out_slice.to(resized_linear_rgb.dtype))
         else:
             num_chunks = (b + gamma_chunk_size - 1) // gamma_chunk_size
             for i in range(num_chunks):
                 s = i * gamma_chunk_size
                 e = min((i + 1) * gamma_chunk_size, b)
-                out_slice = linear_to_srgb(resized_linear_rgb[s:e].to(torch.float32), clamp=clamp)
+                out_slice = linear_to_srgb(
+                    resized_linear_rgb[s:e].to(torch.float32), clamp=clamp
+                )
                 resized_linear_rgb[s:e].copy_(out_slice.to(resized_linear_rgb.dtype))
         resized_srgb = resized_linear_rgb  # sRGB stored in compute dtype
-
-
 
     if alpha is not None:
         alpha_compute = alpha.to(compute_dtype)
@@ -601,7 +620,11 @@ def lanczos_resize(
         cached_profile = _memory_profile_cache[cache_key]
         optimal_batch_size = int(cached_profile.get("optimal_batch_size", 0))
         # v2: max_safe_chunk; v1 fallback: optimal_chunk_size
-        max_safe_chunk = int(cached_profile.get("max_safe_chunk", cached_profile.get("optimal_chunk_size", 0)))
+        max_safe_chunk = int(
+            cached_profile.get(
+                "max_safe_chunk", cached_profile.get("optimal_chunk_size", 0)
+            )
+        )
         logger.info(
             f"Memory profile cache hit for {cache_key}: "
             f"optimal_batch_size={optimal_batch_size}, max_safe_chunk={max_safe_chunk}"
@@ -609,9 +632,14 @@ def lanczos_resize(
 
         if optimal_batch_size > 0 and max_safe_chunk > 0:
             suggested = _suggest_chunk_rows(
-                initial_batch_size, image_tensor.shape[1],
-                image_tensor.shape[2], image_tensor.shape[3],
-                height, width, a, image_tensor.device
+                initial_batch_size,
+                image_tensor.shape[1],
+                image_tensor.shape[2],
+                image_tensor.shape[3],
+                height,
+                width,
+                a,
+                image_tensor.device,
             )
             effective_chunk = max(1, min(max_safe_chunk, suggested))
 
@@ -640,8 +668,6 @@ def lanczos_resize(
                 _save_cache()
                 _weights_cache_dirty = False
             return out
-
-
 
     # --- Adaptive execution: initial full-batch attempt, then layered search on OOM ---
     try:
@@ -675,11 +701,21 @@ def lanczos_resize(
 
             # Phase A: start from min(cached upper bound, current suggestion)
             cached_profile = _memory_profile_cache.get(cache_key, {})
-            cached_bound = int(cached_profile.get("max_safe_chunk", cached_profile.get("optimal_chunk_size", chunk_size)))
+            cached_bound = int(
+                cached_profile.get(
+                    "max_safe_chunk",
+                    cached_profile.get("optimal_chunk_size", chunk_size),
+                )
+            )
             suggested = _suggest_chunk_rows(
-                current_batch, image_tensor.shape[1],
-                image_tensor.shape[2], image_tensor.shape[3],
-                height, width, a, image_tensor.device
+                current_batch,
+                image_tensor.shape[1],
+                image_tensor.shape[2],
+                image_tensor.shape[3],
+                height,
+                width,
+                a,
+                image_tensor.device,
             )
             test_chunk = max(1, int(min(cached_bound, suggested)))
             ok = False
@@ -690,7 +726,13 @@ def lanczos_resize(
                         torch.cuda.empty_cache()
                     gc.collect()
                     _ = _lanczos_resize_core(
-                        image_tensor[:current_batch], height, width, a, test_chunk, clamp, precision
+                        image_tensor[:current_batch],
+                        height,
+                        width,
+                        a,
+                        test_chunk,
+                        clamp,
+                        precision,
                     )
                     ok = True
                     break
@@ -713,7 +755,13 @@ def lanczos_resize(
                         torch.cuda.empty_cache()
                     gc.collect()
                     _ = _lanczos_resize_core(
-                        image_tensor[:current_batch], height, width, a, probe, clamp, precision
+                        image_tensor[:current_batch],
+                        height,
+                        width,
+                        a,
+                        probe,
+                        clamp,
+                        precision,
                     )
                     grown = probe
                 except (torch.cuda.OutOfMemoryError, torch.OutOfMemoryError):
@@ -733,7 +781,6 @@ def lanczos_resize(
             raise torch.OutOfMemoryError(
                 "Could not find a safe batch size for image processing."
             )
-
 
         out = torch.empty(
             (initial_batch_size, image_tensor.shape[1], height, width),
