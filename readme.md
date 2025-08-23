@@ -11,7 +11,7 @@ true anti-aliasing, gamma-correct math, and GPU-ready speed; all in a single, se
 Every image is a **grid of samples** - some captured from the real world, some painted pixel by pixel, or even dreamed up by a neural net.
 Whatever the source, resizing is about building a new grid that’s faithful to the original one... you want to change the size without losing fidelity.
 
-The **sinc function** is the theoretical ideal for accomplishing tat. Imagine every pixel in your image as a point on an endless graph, and sinc as the perfect way to connect those points into a smooth, consistent signal; everywhere, forever.  But sinc is infinite. You see, each pixel whispers to every other pixel, no matter how far away; every point on the graph has some impact on every other point. To calculate even one new pixel, you’d have to listen to all of them, across the entire image, into infinity.
+The **sinc function** is the theoretical ideal for accomplishing that. Imagine every pixel in your image as a point on an endless graph, and sinc as the perfect way to connect those points into a smooth, consistent signal; everywhere, forever.  But sinc is infinite. You see, each pixel whispers to every other pixel, no matter how far away; every point on the graph has some impact on every other point. To calculate even one new pixel, you’d have to listen to all of them, across the entire image, into infinity.
 
 That’s where **Lanczos** comes in.
 Lanczos draws a **local circle** called the **sinc window** around each pixel, wide enough to capture the important whispers nearby, while ignoring the ones too faint to make a perceptible difference.
