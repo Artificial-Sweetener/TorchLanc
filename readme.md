@@ -78,6 +78,32 @@ resized_sharp = lanczos_resize(my_image_batch, height=512, width=512, a=2)
 | `a`             | `int` (opt)   | Lanczos kernel window size. Default `3` is balanced; `2` is sharper; `4` softer. |
 | `chunk_size`    | `int` (opt)   | Controls memory chunking. Default `2048` is safe for most jobs. Set `-1` to auto-tune for maximum GPU throughput (~90% of free VRAM). |
 
+## **Installation**
+
+You can install `torchlanc` using pip:
+
+### From PyPI (Recommended)
+
+```bash
+pip install torchlanc
+```
+
+### From Source (for development)
+
+If you want to install the latest development version or contribute to the project, you can install it directly from GitHub:
+
+```bash
+git clone https://github.com/Artificial-Sweetener/TorchLanc.git
+cd TorchLanc
+pip install .
+```
+
+To install with development dependencies (for running tests and benchmarks):
+
+```bash
+pip install ".[dev]"
+```
+
 ---
 
 # Benchmarking
@@ -88,7 +114,7 @@ TorchLanc comes with a simple test harness so you can see how it performs. You c
 
 TorchLanc itself does not depend on Pillow. The benchmark script does, along with a couple of helpers.
 
-To run the tests, install:
+To run the benchmark, install:
 - Pillow (for the CPU comparison)
 - torchvision (to load and save images)
 - (Optional) py-cpuinfo (to print prettier CPU info)
@@ -99,7 +125,7 @@ pip install pillow torchvision py-cpuinfo
 
 ## Setting up test images
 
-Put two images in the same folder as `test.py`:
+Put two images in the same folder as `benchmark.py`:
 - `test.png` for downscaling tests
 - `test2.png` for upscaling tests
 
@@ -110,7 +136,7 @@ You can use any images you like.
 To see how TorchLanc compares to Pillow, run:
 
 ```bash
-python test.py --race
+python benchmark.py --race
 ```
 
 This will:
@@ -126,19 +152,19 @@ To measure TorchLanc without Pillow:
 
 ```bash
 # Full series of batch sizes
-python test.py --self
+python benchmark.py --self
 
 # Specific batch size
-python test.py --self --batch 256
+python benchmark.py --self --batch 256
 
 # Specific operation
-python test.py --self --op upscale
+python benchmarkt.py --self --op upscale
 ```
 
 Shortcuts work too:
 ```bash
-python test.py --self-256
-python test.py --self-256-upscale
+python benchmark.py --self-256
+python benchmark.py --self-256-upscale
 ```
 
 ## Useful flags
