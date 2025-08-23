@@ -11,6 +11,7 @@
 ### Changed
 
 - Restructured the project for publishing to PyPI.
+- Updated `readme.md` with installation instructions.
 
 ### Fixed
 
