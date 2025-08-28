@@ -26,12 +26,12 @@ It’s like stepping into clean daylight to do your work, then returning to the 
 
 ### **GPU Acceleration**
 
-A CPU is like a **skilled soloist**; precise, flexible, able to improvise through complex logic one note at a time.
-A GPU is like a **massive orchestra**, hundreds of players performing the same score in perfect synchrony.
+A CPU is a **master craftsperson** at a bench; precise, flexible, built for intricate, branching work one piece at a time. 
+A GPU is a **production line**: hundreds of identical stations executing the same motion in lockstep.
 
-For resizing, that score is simple and repetitive: multiply, sum, repeat. The GPU thrives on that kind of harmony, processing thousands of pixels in parallel while the CPU would still be playing the opening bars.
+For resizing, that motion is simple and repetitive: multiply, sum, repeat. The GPU thrives on that steady cadence, reshaping thousands of pixels at once while the CPU would handle them in sequence.
 
-TorchLanc leans into that parallelism, letting the GPU carry the heavy, uniform work while keeping results sharp and consistent.
+TorchLanc leans into that parallelism, letting the line carry the heavy, uniform work while keeping results sharp and consistent.
 
 ### **Persistent Weight Cache**
 
@@ -188,9 +188,15 @@ If you care about:
 
 Fast. Principled. Beautiful.
 
- - ArtificialSweetener
+## From the Developer 💖
 
-## Personal Benchmark Results
+I hope TorchLanc is useful to you and you find lots of ways it can save you time while delivering HQ results! If you'd like to support my work or see what else I'm up to, here are a few links:
+
+- **Buy Me a Coffee**: You can help fuel more projects like this at my [Ko-fi page](https://ko-fi.com/artificial_sweetener).
+- **My Website & Socials**: See my art, poetry, and other dev updates at [artificialsweetener.ai](https://artificialsweetener.ai).
+- **If you like this project**, it would mean a lot to me if you gave me a star here on Github!! ⭐
+
+## Personal Benchmark Results - See Labels for Comparisons!
 
 <img width="1080" height="1210" alt="comparison_batch_1_downscale" src="https://github.com/user-attachments/assets/c6b24327-5cdf-4624-8fc9-93d8e5bc42f5" />
 <img width="1080" height="1210" alt="comparison_batch_8_downscale" src="https://github.com/user-attachments/assets/d44661de-a8ba-4d4a-8886-ce6a376be24e" />
