@@ -19,21 +19,23 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          token: ${{ secrets.GH_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
-      - name: Install dependencies
+      - name: Install build deps
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .[dev]
           python -m pip install build
 
-      - name: Create release (bump/tag/changelog)
+      # Let semantic-release determine/confirm version and write it to setup.cfg
+      - name: Create release (no build)
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
@@ -49,7 +51,7 @@ jobs:
       - name: Upload dist
         uses: actions/upload-artifact@v4
         with:
-          name: dist
+          name: dist-${{ steps.semver.outputs.version }}
           path: dist/*
 
   publish-pypi:
@@ -59,7 +61,7 @@ jobs:
       - name: Download dist
         uses: actions/download-artifact@v4
         with:
-          name: dist
+          name: dist-${{ needs.release.outputs.version }}
           path: dist/
 
       - name: Publish to PyPI
