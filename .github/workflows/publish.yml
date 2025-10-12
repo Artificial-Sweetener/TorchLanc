@@ -38,7 +38,7 @@ jobs:
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
-          semantic-release publish --no-pypi
+          python -m semantic_release publish --no-pypi
 
       - name: Build dist
         run: python -m build
