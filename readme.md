@@ -24,6 +24,8 @@ Most images are stored in **sRGB**, where the numbers in the file don’t match 
 TorchLanc converts your pixels into **linear light** before resampling, then brings them back to sRGB afterward.
 It’s like stepping into clean daylight to do your work, then returning to the gallery with your colors intact: bright, true, and vibrant.
 
+If that sounds too extra for you, you can also get **FFmpeg/Pillow parity**. Just set `color_space="srgb"` to resample directly in sRGB; that skips the linearization step.
+
 ### **GPU Acceleration**
 
 A CPU is like a **skilled soloist**; precise, flexible, able to improvise through complex logic one note at a time.
@@ -49,11 +51,14 @@ from torchlanc import lanczos_resize
 # Batch of images: (B, C, H, W)
 my_image_batch = torch.randn(4, 3, 256, 256).to("cuda")
 
-# High-quality resize
+# High-quality resize (default: gamma-correct, resample in linear space)
 resized = lanczos_resize(my_image_batch, height=512, width=512)
 
 # Sharper variant with a=2
 resized_sharp = lanczos_resize(my_image_batch, height=512, width=512, a=2)
+
+# Resample directly in sRGB; skips linearization
+resized_srgb = lanczos_resize(my_image_batch, height=512, width=512, color_space="srgb")
 ```
 
 ## **Parameters**
@@ -65,6 +70,7 @@ resized_sharp = lanczos_resize(my_image_batch, height=512, width=512, a=2)
 | `width`         | `int`         | Target width.                                                               |
 | `a`             | `int` (opt)   | Lanczos kernel window size. Default `3` is balanced; `2` is sharper; `4` softer. |
 | `chunk_size`    | `int` (opt)   | Controls memory chunking. Default `2048` is safe for most jobs. Set `-1` to auto-tune for maximum GPU throughput (~90% of free VRAM). |
+| `color_space`   | `str` (opt)   | `"linear"` (default) resamples in linear light with sRGB ↔ linear transforms; `"srgb"` resamples directly in sRGB to match FFmpeg/Pillow. |
 
 ## **Installation**
 

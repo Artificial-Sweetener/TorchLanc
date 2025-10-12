@@ -376,6 +376,116 @@ def run_self_test(device, test_config):
         f"  Batch Size: {batch_size:<5} | Time: {duration_ms:.2f}ms | Per Image: {duration_ms/batch_size:.2f}ms"
     )
 
+def run_batch_from_dir(device, test_config, indir, out_dir):
+    """
+    Loads all images from `indir`, validates that they share (C,H,W), builds a single batch,
+    resizes using test_config, and writes each output frame to `out_dir` as:
+      <original-stem>_<operation>_<index>.png
+    """
+    operation = test_config["operation"]
+    scale_factor = float(test_config["scale_factor"])
+
+    if not os.path.isdir(indir):
+        raise FileNotFoundError(f"Input directory not found: {indir}")
+
+    exts = (".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff")
+    entries = sorted(f for f in os.listdir(indir) if f.lower().endswith(exts))
+    if not entries:
+        print(f"No images found in {indir}. Supported: {', '.join(exts)}")
+        return
+
+    tensors = []
+    stems = []
+    for fname in entries:
+        path = os.path.join(indir, fname)
+        t = torchvision.io.read_image(path).unsqueeze(0).float() / 255.0  # (1,C,H,W)
+        tensors.append(t)
+        stems.append(os.path.splitext(fname)[0])
+
+    # Validate consistent shape (C,H,W)
+    base = tensors[0].shape[1:]
+    for stem, t in zip(stems, tensors):
+        if t.shape[1:] != base:
+            raise ValueError(
+                f"All images must share shape (C,H,W)={base}, but '{stem}' has {t.shape[1:]}."
+            )
+
+    # Build batch: (N,C,H,W)
+    input_batch = torch.cat(tensors, dim=0).to(device)
+    _, _, H, W = input_batch.shape
+
+    out_w = int(round(W * scale_factor))
+    out_h = int(round(H * scale_factor))
+
+    # Resize once for the whole batch
+    with torch.no_grad():
+        output_batch, duration_ms = time_run(
+            device,
+            lambda: lanczos_resize(input_batch, height=out_h, width=out_w, a=3),
+        )
+
+    os.makedirs(out_dir, exist_ok=True)
+    # Save frames with index for determinism / traceability
+    for i, stem in enumerate(stems):
+        pil_img = tensor_to_pil(output_batch[i].unsqueeze(0))
+        out_name = f"{stem}_{operation}_{i:03d}.png"
+        out_path = os.path.join(out_dir, out_name)
+        pil_img.save(out_path)
+        print(f"Saved {out_path}")
+
+    n = len(stems)
+    print(
+        f"\nProcessed {n} images from '{indir}' as a single batch "
+        f"({operation}, {W}x{H} -> {out_w}x{out_h}) in {duration_ms:.2f}ms "
+        f"({duration_ms/max(n,1):.2f}ms/img)."
+    )
+
+
+def dump_batch_outputs(device, test_config, out_dir):
+    """
+    Runs a single resize for a test_config and saves every frame in the batch
+    into out_dir with filenames: <original>_<operation>_<index>.png
+    """
+    image_filename = test_config["image_filename"]
+    operation = test_config["operation"]
+    batch_size = int(test_config["batch_size"])
+
+    script_dir = os.path.dirname(__file__)
+    full_image_path = os.path.normpath(os.path.join(script_dir, image_filename))
+
+    # Load 1 image and build a batch
+    input_tensor_single = (
+        torchvision.io.read_image(full_image_path).unsqueeze(0).float() / 255.0
+    )
+    input_batch_tensor = input_tensor_single.repeat(batch_size, 1, 1, 1).to(device)
+    _, _, original_height, original_width = input_batch_tensor.shape
+
+    # Target size
+    scale_factor = test_config["scale_factor"]
+    output_width = int(round(original_width * scale_factor))
+    output_height = int(round(original_height * scale_factor))
+
+    # Resize once to produce the whole batch
+    with torch.no_grad():
+        output_batch, _ = time_run(
+            device,
+            lambda: lanczos_resize(
+                input_batch_tensor, height=output_height, width=output_width, a=3
+            ),
+        )
+
+    # Prepare output dir
+    os.makedirs(out_dir, exist_ok=True)
+    stem = os.path.splitext(os.path.basename(image_filename))[0]
+
+    # Save every item in the batch
+    for i in range(batch_size):
+        pil_img = tensor_to_pil(output_batch[i].unsqueeze(0))
+        out_name = f"{stem}_{operation}_{i:03d}.png"
+        out_path = os.path.join(out_dir, out_name)
+        pil_img.save(out_path)
+        print(f"Saved {out_path}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Benchmarking tests for TorchLanc.")
@@ -412,6 +522,29 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cpu-only", action="store_true", help="Force CPU even if CUDA is available."
     )
+    parser.add_argument(
+        "--dump-batch",
+        action="store_true",
+        help="Output resized batch frames for both tests into batch/."
+    )
+    parser.add_argument(
+        "--outdir",
+        type=str,
+        default=None,
+        help="Output directory (default: ./batch next to this script)."
+    )
+    parser.add_argument(
+        "--run-batch-dir",
+        action="store_true",
+        help="Load all images from a directory as ONE batch and process them."
+    )
+    parser.add_argument(
+        "--indir",
+        type=str,
+        default=None,
+        help="Input directory (default: ./input_batch next to benchmark.py)."
+    )
+
 
     # Expand shorthands like: --self-256  or  --self-256-upscale
     argv = sys.argv[1:]
@@ -427,7 +560,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args(expanded)
 
-    if not args.self and not args.race:
+    if not args.self and not args.race and not args.dump_batch and not args.run_batch_dir:
         parser.print_help()
         exit()
 
@@ -473,18 +606,53 @@ if __name__ == "__main__":
     }
 
     # --- Prerequisite Check ---
-    required_files = [
-        downscale_config_base["image_filename"],
-        upscale_config_base["image_filename"],
-    ]
-    script_dir = os.path.dirname(__file__)
-    for f in required_files:
-        full_path = os.path.normpath(os.path.join(script_dir, f))
-        if not os.path.exists(full_path):
-            print(
-                f"\nError: The test image '{full_path}' was not found. Please add it to this directory."
-            )
-            exit()
+    if args.race or args.self or args.dump_batch:
+        required_files = [
+            downscale_config_base["image_filename"],
+            upscale_config_base["image_filename"],
+        ]
+        script_dir = os.path.dirname(__file__)
+        for f in required_files:
+            full_path = os.path.normpath(os.path.join(script_dir, f))
+            if not os.path.exists(full_path):
+                print(
+                    f"\nError: The test image '{full_path}' was not found. Please add it to this directory."
+                )
+                exit()
+
+
+    # Default output directory
+    out_dir = args.outdir or os.path.join(script_dir, "batch")
+
+    # Default input directory for directory-batch mode
+    in_dir = args.indir or os.path.join(script_dir, "input_batch")
+
+    if args.dump_batch:
+        # Use --batch if provided; otherwise default to 8
+        dump_batch_size = int(args.batch) if args.batch is not None else 8
+
+        # Downscale on test.png
+        cfg = downscale_config_base.copy()
+        cfg["batch_size"] = dump_batch_size
+        dump_batch_outputs(device, cfg, out_dir)
+
+        # Upscale on test2.png
+        cfg = upscale_config_base.copy()
+        cfg["batch_size"] = dump_batch_size
+        dump_batch_outputs(device, cfg, out_dir)
+
+    if args.run_batch_dir:
+        # If --op is not provided, run both; else run only the selected one
+        op_configs = (
+            [downscale_config_base, upscale_config_base]
+            if args.op is None
+            else [downscale_config_base if args.op == "downscale" else upscale_config_base]
+        )
+        for cfg in op_configs:
+            print(f"\n--- RUNNING DIR-BATCH ({cfg['operation']}) FROM: {in_dir} ---")
+            run_batch_from_dir(device, cfg, in_dir, out_dir)
+
+
 
     if args.race:
         # --- Run Race Test Series ---

@@ -479,6 +479,7 @@ def _lanczos_resize_core(
     chunk_size: int = 2048,
     clamp: bool = True,
     precision: str = "high",
+    color_space: str = "linear",
 ) -> torch.Tensor:
     """
     Resizes a batch of images using a separable, gamma-correct Lanczos filter.
@@ -507,59 +508,64 @@ def _lanczos_resize_core(
     }
     compute_dtype = _precision_map.get(precision.lower(), torch.float32)
 
+    if color_space not in ("linear", "srgb"):
+        raise ValueError("color_space must be 'linear' or 'srgb'")
+
     if image_tensor.shape[1] == 4:
         rgb, alpha = torch.split(image_tensor, [3, 1], dim=1)
     else:
         rgb, alpha = image_tensor, None
 
-    # sRGB -> linear in float32 for accuracy
-    linear_rgb_f32 = srgb_to_linear(rgb.to(torch.float32))
-    # Resampling is performed in the selected compute dtype
-    linear_rgb = linear_rgb_f32.to(compute_dtype)
+    if color_space == "linear":
+        # sRGB -> linear in float32 for accuracy
+        linear_rgb_f32 = srgb_to_linear(rgb.to(torch.float32))
+        linear_rgb = linear_rgb_f32.to(compute_dtype)
 
-    # Separable resampling: width then height
-    resized_w = resample_1d(linear_rgb, width, a=a, dim=-1, chunk_size=chunk_size)
-    resized_linear_rgb = resample_1d(
-        resized_w, height, a=a, dim=-2, chunk_size=chunk_size
-    )
+        # Separable resampling: width then height (in linear)
+        resized_w = resample_1d(linear_rgb, width, a=a, dim=-1, chunk_size=chunk_size)
+        resized_linear_rgb = resample_1d(
+            resized_w, height, a=a, dim=-2, chunk_size=chunk_size
+        )
 
-    # linear -> sRGB in float32; stream slice-by-slice to avoid large temporaries
-    b, c, h, w = resized_linear_rgb.shape
-    bytes_per_img_f32 = c * h * w * 4  # gamma math in fp32
-    budget = (
-        256 * 1024 * 1024 if image_tensor.device.type == "cuda" else 1024 * 1024 * 1024
-    )
-    gamma_chunk_size = max(1, min(b, int(budget // max(1, bytes_per_img_f32))))
+        # linear -> sRGB in float32; stream slice-by-slice to avoid large temporaries
+        b, c, h, w = resized_linear_rgb.shape
+        bytes_per_img_f32 = c * h * w * 4
+        budget = (
+            256 * 1024 * 1024 if image_tensor.device.type == "cuda" else 1024 * 1024 * 1024
+        )
+        gamma_chunk_size = max(1, min(b, int(budget // max(1, bytes_per_img_f32))))
 
-    if resized_linear_rgb.dtype == torch.float32:
-        # Overwrite each slice in place (compute in fp32, write back to the same buffer).
-        if gamma_chunk_size >= b:
-            resized_linear_rgb.copy_(linear_to_srgb(resized_linear_rgb, clamp=clamp))
+        if resized_linear_rgb.dtype == torch.float32:
+            if gamma_chunk_size >= b:
+                resized_linear_rgb.copy_(linear_to_srgb(resized_linear_rgb, clamp=clamp))
+            else:
+                num_chunks = (b + gamma_chunk_size - 1) // gamma_chunk_size
+                for i in range(num_chunks):
+                    s = i * gamma_chunk_size
+                    e = min((i + 1) * gamma_chunk_size, b)
+                    out_slice = linear_to_srgb(resized_linear_rgb[s:e], clamp=clamp)
+                    resized_linear_rgb[s:e].copy_(out_slice)
+            resized_srgb = resized_linear_rgb
         else:
-            num_chunks = (b + gamma_chunk_size - 1) // gamma_chunk_size
-            for i in range(num_chunks):
-                s = i * gamma_chunk_size
-                e = min((i + 1) * gamma_chunk_size, b)
-                out_slice = linear_to_srgb(resized_linear_rgb[s:e], clamp=clamp)
-                resized_linear_rgb[s:e].copy_(out_slice)
-        resized_srgb = resized_linear_rgb  # now holds sRGB in fp32
+            if gamma_chunk_size >= b:
+                out_slice = linear_to_srgb(resized_linear_rgb.to(torch.float32), clamp=clamp)
+                resized_linear_rgb.copy_(out_slice.to(resized_linear_rgb.dtype))
+            else:
+                num_chunks = (b + gamma_chunk_size - 1) // gamma_chunk_size
+                for i in range(num_chunks):
+                    s = i * gamma_chunk_size
+                    e = min((i + 1) * gamma_chunk_size, b)
+                    out_slice = linear_to_srgb(resized_linear_rgb[s:e].to(torch.float32), clamp=clamp)
+                    resized_linear_rgb[s:e].copy_(out_slice.to(resized_linear_rgb.dtype))
+            resized_srgb = resized_linear_rgb
     else:
-        # Compute gamma in fp32 per slice, then store back in compute dtype to keep memory bounded.
-        if gamma_chunk_size >= b:
-            out_slice = linear_to_srgb(
-                resized_linear_rgb.to(torch.float32), clamp=clamp
-            )
-            resized_linear_rgb.copy_(out_slice.to(resized_linear_rgb.dtype))
-        else:
-            num_chunks = (b + gamma_chunk_size - 1) // gamma_chunk_size
-            for i in range(num_chunks):
-                s = i * gamma_chunk_size
-                e = min((i + 1) * gamma_chunk_size, b)
-                out_slice = linear_to_srgb(
-                    resized_linear_rgb[s:e].to(torch.float32), clamp=clamp
-                )
-                resized_linear_rgb[s:e].copy_(out_slice.to(resized_linear_rgb.dtype))
-        resized_srgb = resized_linear_rgb  # sRGB stored in compute dtype
+        # Resample directly in sRGB (gamma-encoded) space to match FFmpeg/Pillow
+        rgb_compute = rgb.to(compute_dtype)
+        resized_w = resample_1d(rgb_compute, width, a=a, dim=-1, chunk_size=chunk_size)
+        resized_srgb = resample_1d(
+            resized_w, height, a=a, dim=-2, chunk_size=chunk_size
+        )
+
 
     if alpha is not None:
         alpha_compute = alpha.to(compute_dtype)
@@ -586,7 +592,9 @@ def lanczos_resize(
     chunk_size: int = 2048,
     clamp: bool = True,
     precision: str = "high",
+    color_space: str = "linear",
 ) -> torch.Tensor:
+
     """
     Resizes a batch of images using a separable, gamma-correct Lanczos filter.
     Handles OOM by adaptively splitting batches and backing off chunk size.
@@ -610,7 +618,8 @@ def lanczos_resize(
 
     # --- Generate Cache Key ---
     device_id = _get_device_identifier()
-    cache_key = f"{device_id}::{input_height}::{input_width}::{height}::{width}::{a}::{precision}"
+    cache_key = f"{device_id}::{input_height}::{input_width}::{height}::{width}::{a}::{precision}::{color_space}"
+
 
     optimal_batch_size = None
     optimal_chunk_size = None
@@ -645,7 +654,7 @@ def lanczos_resize(
 
             if optimal_batch_size >= initial_batch_size:
                 out = _lanczos_resize_core(
-                    image_tensor, height, width, a, effective_chunk, clamp, precision
+                    image_tensor, height, width, a, effective_chunk, clamp, precision, color_space
                 )
                 if _weights_cache_dirty:
                     _save_cache()
@@ -660,7 +669,7 @@ def lanczos_resize(
             for i in range(0, initial_batch_size, optimal_batch_size):
                 sub_batch = image_tensor[i : i + optimal_batch_size]
                 processed = _lanczos_resize_core(
-                    sub_batch, height, width, a, effective_chunk, clamp, precision
+                    sub_batch, height, width, a, effective_chunk, clamp, precision, color_space
                 )
                 out[i : i + processed.shape[0]] = processed
 
@@ -793,7 +802,7 @@ def lanczos_resize(
                 torch.cuda.empty_cache()
             gc.collect()
             processed = _lanczos_resize_core(
-                sub_batch, height, width, a, found_chunk, clamp, precision
+                sub_batch, height, width, a, found_chunk, clamp, precision, color_space
             )
             out[i : i + processed.shape[0]] = processed
 
