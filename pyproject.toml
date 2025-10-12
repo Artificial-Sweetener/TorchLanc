@@ -3,13 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.semantic_release]
-version_source = "file"
-version_variable = "setup.cfg:version"
-upload_to_pypi = true
-upload_to_release = true
-build_command = "pip install build && python -m build"
-commit_parser = "semantic_release.commit_parser.scipy.ScipyCommitParser"
+version_variables = ["setup.cfg:version"]
+changelog_file = "CHANGELOG.md"
+commit_parser = "angular"
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-
