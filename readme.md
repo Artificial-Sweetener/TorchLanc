@@ -4,6 +4,33 @@ I built this because I needed a resampler that was **fast, principled, and uncom
 TorchLanc is for anyone who cares about the details:
 true anti-aliasing, gamma-correct math, and GPU-ready speed; all in a single, self-contained module you can drop straight into your project.
 
+
+## **Installation**
+
+You can install `torchlanc` using pip:
+
+### From PyPI (Recommended)
+
+```bash
+pip install torchlanc
+```
+
+### From Source (for development)
+
+If you want to install the latest development version or contribute to the project, you can install it directly from GitHub:
+
+```bash
+git clone https://github.com/Artificial-Sweetener/TorchLanc.git
+cd TorchLanc
+pip install .
+```
+
+To install with development dependencies (for running tests and benchmarks):
+
+```bash
+pip install ".[dev]"
+```
+
 ## **Features**
 
 ### **Resizing Done Right: Sinc and Lanczos**
@@ -71,41 +98,6 @@ resized_srgb = lanczos_resize(my_image_batch, height=512, width=512, color_space
 | `a`             | `int` (opt)   | Lanczos kernel window size. Default `3` is balanced; `2` is sharper; `4` softer. |
 | `chunk_size`    | `int` (opt)   | Controls memory chunking. Default `2048` is safe for most jobs. Set `-1` to auto-tune for maximum GPU throughput (~90% of free VRAM). |
 | `color_space`   | `str` (opt)   | `"linear"` (default) resamples in linear light with sRGB ↔ linear transforms; `"srgb"` resamples directly in sRGB to match FFmpeg/Pillow. |
-
-### **Advanced Controls**
-
-TorchLanc exposes a couple of environment variables so you can tune throughput without editing code:
-
-| Variable | Description |
-|----------|-------------|
-| `TORCHLANC_VRAM_FRACTION` | Fraction of currently free VRAM each resize pass may consume (default `0.30`). Increase it to favor fewer row chunks on large GPUs. |
-| `TORCHLANC_VALIDATE_RANGE` | Set to `1` to raise if any pixel falls outside `[0, 1]`, which is useful when validating upstream pipelines. |
-
-## **Installation**
-
-You can install `torchlanc` using pip:
-
-### From PyPI (Recommended)
-
-```bash
-pip install torchlanc
-```
-
-### From Source (for development)
-
-If you want to install the latest development version or contribute to the project, you can install it directly from GitHub:
-
-```bash
-git clone https://github.com/Artificial-Sweetener/TorchLanc.git
-cd TorchLanc
-pip install .
-```
-
-To install with development dependencies (for running tests and benchmarks):
-
-```bash
-pip install ".[dev]"
-```
 
 # Benchmarking
 

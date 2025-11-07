@@ -5,6 +5,7 @@
 - `run_benchmark_race.(sh|bat)` now bootstrap virtualenvs with CUDA 13 nightly PyTorch wheels by default (CPU nightly fallback when kernels are unavailable).
 - `torchlanc/torchlanc.py` comments were pruned and docstrings expanded so the module is self-documenting without redundant inline narration.
 - Added regression tests covering color-space selection, chunk-size auto defaults, alpha isolation, cache behavior, and the TORCHLANC_VALIDATE_RANGE knob.
+- README now documents advanced environment controls for VRAM budgeting and range validation.
 
 ### Fixed
 
