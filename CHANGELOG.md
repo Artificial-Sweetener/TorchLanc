@@ -1,5 +1,9 @@
 # 1.1.1 (2025-11-07)
 
+### Changed
+
+- `run_benchmark_race.(sh|bat)` now bootstrap virtualenvs with CUDA 13 nightly PyTorch wheels by default (CPU nightly fallback when kernels are unavailable).
+
 ### Fixed
 
 - Respects `color_space="srgb"` across the initial run and OOM probing so cached profiles and output match the requested color space.
