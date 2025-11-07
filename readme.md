@@ -150,7 +150,7 @@ python benchmark.py --self
 python benchmark.py --self --batch 256
 
 # Specific operation
-python benchmarkt.py --self --op upscale
+python benchmark.py --self --op upscale
 ```
 
 Shortcuts work too:
