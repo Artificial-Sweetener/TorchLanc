@@ -1,6 +1,8 @@
 import pytest
 import torch
-from torchlanc import lanczos_resize
+
+from torchlanc import lanczos_resize, clear_profile_cache, set_cache_dir
+from torchlanc.torchlanc import _memory_profile_cache, _get_device_identifier, clear_weight_cache
 
 
 @pytest.fixture
@@ -79,3 +81,48 @@ def test_alpha_channel_handling():
     tensor_rgba = torch.rand(1, 4, 32, 32, dtype=torch.float32)
     output = lanczos_resize(tensor_rgba, height=64, width=64)
     assert output.shape == (1, 4, 64, 64)
+
+
+def test_color_space_branch_differs(checkerboard_tensor):
+    rgb = torch.linspace(0, 1, steps=16, dtype=torch.float32).reshape(1, 1, 4, 4)
+    tensors = rgb.repeat(1, 3, 1, 1)
+    out_linear = lanczos_resize(tensors, height=8, width=8, color_space="linear")
+    out_srgb = lanczos_resize(tensors, height=8, width=8, color_space="srgb")
+    assert torch.allclose(out_linear, out_srgb) is False
+
+
+def test_chunk_size_auto_populates_cache(tmp_path, monkeypatch, checkerboard_tensor):
+    cache_dir = tmp_path / "cache"
+    set_cache_dir(str(cache_dir), reload_from_disk=True)
+    clear_profile_cache(persist=False)
+    _ = lanczos_resize(checkerboard_tensor, height=8, width=8, chunk_size=0)
+    key = f"{_get_device_identifier()}::4::4::8::8::3::high::linear"
+    assert key in _memory_profile_cache
+    assert _memory_profile_cache[key]["max_safe_chunk"] > 0
+
+
+def test_validate_range_env(monkeypatch):
+    monkeypatch.setenv("TORCHLANC_VALIDATE_RANGE", "1")
+    tensor = torch.ones(1, 3, 4, 4).to(torch.float32) * 2
+    with pytest.raises(ValueError, match=r"values must be in \[0, 1\]"):
+        lanczos_resize(tensor, height=2, width=2)
+    monkeypatch.delenv("TORCHLANC_VALIDATE_RANGE", raising=False)
+
+
+def test_alpha_rgb_isolation():
+    rgb = torch.ones(1, 3, 8, 8)
+    alpha = torch.linspace(0, 1, steps=64, dtype=torch.float32).reshape(1, 1, 8, 8)
+    tensor = torch.cat([rgb, alpha], dim=1)
+    out = lanczos_resize(tensor, height=4, width=4)
+    rgb_out, alpha_out = out[:, :3], out[:, 3:]
+    assert torch.allclose(rgb_out, torch.ones_like(rgb_out))
+    assert alpha_out.min() >= 0 and alpha_out.max() <= 1
+
+
+def test_cache_hit_matches_cold(checkerboard_tensor):
+    first = lanczos_resize(checkerboard_tensor, height=8, width=8)
+    from torchlanc import clear_weight_cache
+
+    clear_weight_cache(persist=False)
+    second = lanczos_resize(checkerboard_tensor, height=8, width=8)
+    assert torch.allclose(first, second, atol=1e-6)
