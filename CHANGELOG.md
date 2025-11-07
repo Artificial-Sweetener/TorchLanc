@@ -3,6 +3,7 @@
 ### Changed
 
 - `run_benchmark_race.(sh|bat)` now bootstrap virtualenvs with CUDA 13 nightly PyTorch wheels by default (CPU nightly fallback when kernels are unavailable).
+- `torchlanc/torchlanc.py` comments were pruned and docstrings expanded so the module is self-documenting without redundant inline narration.
 
 ### Fixed
 

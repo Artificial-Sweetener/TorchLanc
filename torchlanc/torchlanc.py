@@ -16,7 +16,6 @@ from typing import Optional, Tuple
 
 import torch
 
-# --- Setup ---
 logger = logging.getLogger(__name__)
 
 
@@ -81,7 +80,6 @@ class LanczosCache:
         """Loads the cache from a dictionary."""
         with self.lock:
             self.cache = OrderedDict(state_dict)
-            # Recalculate the current size based on the loaded items
             self.current_size_bytes = sum(
                 self._get_tensor_size_bytes(v) for v in self.cache.values()
             )
@@ -90,10 +88,9 @@ class LanczosCache:
             )
 
 
-# --- Persistent, Thread-safe Weight Caching ---
 _lanczos_cache = LanczosCache(max_size_mb=32)
-_memory_profile_cache = {}  # In-memory memory profiles
-_weights_cache_dirty = False  # set True when new weight entries are added
+_memory_profile_cache = {}
+_weights_cache_dirty = False
 
 
 def _default_cache_root() -> pathlib.Path:
@@ -168,11 +165,9 @@ def _load_memory_profile_cache() -> None:
             logger.info(
                 f"Memory profile cache: Migrated {len(_memory_profile_cache)} entries to v2."
             )
-            # Persist the migrated data as v2
             _save_memory_profile_cache()
             return
 
-        # v2 already
         _memory_profile_cache = profiles
         logger.info(
             f"Memory profile cache: Loaded {len(_memory_profile_cache)} entries."
@@ -197,16 +192,13 @@ def _save_cache() -> None:
         entries_cpu = OrderedDict()
         with _lanczos_cache.lock:
             for k, (w, idx) in _lanczos_cache.cache.items():
-                # Device-specific in-memory key shape:
-                # ("lanczos_wts", in_size, out_size, a, str(dtype), device_tag)
                 base_key = None
                 if isinstance(k, tuple) and len(k) >= 4 and k[0] == "lanczos_wts":
                     base_key = ("lanczos_wts", k[1], k[2], k[3])
-                # Fallback: keep original key if it doesn't match expected pattern
                 target_key = base_key if base_key is not None else k
 
                 if target_key in entries_cpu:
-                    continue  # already captured a CPU copy for this base key
+                    continue
 
                 w_cpu = w.detach().to(device="cpu", dtype=torch.float32)
                 idx_cpu = idx.detach().to(device="cpu")
@@ -235,7 +227,6 @@ def _load_cache() -> None:
         if not isinstance(entries, dict):
             logger.warning("Lanczos cache: Entries not a dict. Starting fresh.")
             return
-        # Load entries as-is (CPU tensors). In-memory LRU will move them to the target device on demand.
         _lanczos_cache.load_state_dict(entries)
         logger.info(f"Lanczos cache: Loaded {len(entries)} items.")
     except Exception as e:
@@ -278,40 +269,30 @@ def _suggest_chunk_rows(
     a: int,
     device: torch.device,
 ) -> int:
-    """
-    Suggest a conservative row-chunk for _resample_1d_jit based on current free VRAM.
-    Rows = B * C * other_dim for each pass; chunk_size is in rows.
-    """
+    """Estimate a safe row chunk size using current free VRAM (scaled by TORCHLANC_VRAM_FRACTION)."""
     if device.type != "cuda":
-        return 2**31 - 1  # effectively "no constraint" on CPU
+        return 2**31 - 1
 
     try:
         free_bytes, total_bytes = torch.cuda.mem_get_info()
     except Exception:
-        return 2**20  # reasonable default if query fails
+        return 2**20
 
-    # Budget: fraction of currently free memory; tunable via env.
     frac = float(os.environ.get("TORCHLANC_VRAM_FRACTION", "0.30"))
     frac = max(0.05, min(frac, 0.9))
     budget = max(64 * 1024 * 1024, int(free_bytes * frac))
 
-    # Lanczos support window (largest across width/height passes).
     scale_w = max(float(in_w) / float(out_w), 1.0)
     scale_h = max(float(in_h) / float(out_h), 1.0)
     win_w = int(math.ceil(a * scale_w) * 2)
     win_h = int(math.ceil(a * scale_h) * 2)
     window = max(win_w, win_h)
 
-    # Element size: resample runs in the tensor's compute dtype; default is fp32.
-    elem_size = 4  # float32 bytes; if you enable fp16/bf16, adjust here accordingly.
-
-    # Ephemeral per chunk: gathered_pixels ~ rows * window * elem_size
-    # Keep at most half the budget for this term to leave room for other temporaries.
+    elem_size = 4
     if window <= 0:
         return 2**31 - 1
     rows_budget = max(1, (budget // 2) // max(1, window * elem_size))
 
-    # Also can’t exceed true row counts; take the min across both passes.
     rows_width_pass = b * c * in_h
     rows_height_pass = b * c * out_w
     hard_cap = min(rows_width_pass, rows_height_pass)
@@ -325,8 +306,6 @@ def _normalize_chunk_size(chunk_size: int, device: torch.device) -> int:
         return chunk_size
     return 2048 if device.type == "cuda" else 65536
 
-
-# --- Gamma Correction Functions ---
 def srgb_to_linear(tensor: torch.Tensor) -> torch.Tensor:
     """Converts a tensor from sRGB to linear color space."""
     return torch.where(
@@ -401,7 +380,6 @@ def resample_1d(
     in_size = tensor.shape[dim]
     device = tensor.device
 
-    # Build per-device cache key; base key is device-agnostic for disk persistence.
     if tensor.is_cuda:
         idx = tensor.device.index if tensor.device.index is not None else 0
         try:
@@ -415,7 +393,6 @@ def resample_1d(
     device_key = ("lanczos_wts", in_size, out_size, a, str(compute_dtype), device_tag)
     base_key = ("lanczos_wts", in_size, out_size, a)
 
-    # Resolve weights/indices locally and ensure correct device/dtype.
     weights: torch.Tensor
     clamped_indices: torch.Tensor
 
@@ -431,7 +408,6 @@ def resample_1d(
             weights = w_cpu.to(device=device, dtype=compute_dtype, copy=False)
             clamped_indices = idx_cpu.to(device=device, copy=False)
             _lanczos_cache.put(device_key, (weights, clamped_indices))
-            # Remove base to avoid duplication in RAM.
             try:
                 with _lanczos_cache.lock:
                     if base_key in _lanczos_cache.cache:
@@ -444,7 +420,6 @@ def resample_1d(
             except Exception:
                 pass
         else:
-            # Build weights on the target device.
             scale = float(in_size) / float(out_size)
             kernel_scale = max(scale, 1.0)
             support = float(a) * kernel_scale
@@ -472,7 +447,6 @@ def resample_1d(
             _lanczos_cache.put(device_key, (weights, clamped_indices))
             _weights_cache_dirty = True
 
-    # Use the local, device-correct tensors; do not re-fetch from the LRU here.
     return _resample_1d_jit(
         tensor, in_size, out_size, dim, chunk_size, weights, clamped_indices
     )
@@ -489,8 +463,8 @@ def _lanczos_resize_core(
     color_space: str = "linear",
 ) -> torch.Tensor:
     """
-    Resizes a batch of images using a separable, gamma-correct Lanczos filter.
-    No internal retries or memory cleanup; any OOM propagates to the caller.
+    Resize a batch by (1) optional sRGB→linear conversion, (2) width/height Lanczos passes with cached 1D kernels,
+    (3) linear→sRGB if requested, and (4) alpha pass if present. Any OOM propagates to the caller.
     """
     if not (image_tensor.ndim == 4 and image_tensor.shape[1] in [1, 3, 4]):
         raise ValueError(
@@ -501,7 +475,6 @@ def _lanczos_resize_core(
 
     original_dtype = image_tensor.dtype
 
-    # Precision selection for resampling; gamma is always processed in float32
     _precision_map = {
         "high": torch.float32,
         "fp32": torch.float32,
@@ -523,17 +496,14 @@ def _lanczos_resize_core(
         rgb, alpha = image_tensor, None
 
     if color_space == "linear":
-        # sRGB -> linear in float32 for accuracy
         linear_rgb_f32 = srgb_to_linear(rgb.to(torch.float32))
         linear_rgb = linear_rgb_f32.to(compute_dtype)
 
-        # Separable resampling: width then height (in linear)
         resized_w = resample_1d(linear_rgb, width, a=a, dim=-1, chunk_size=chunk_size)
         resized_linear_rgb = resample_1d(
             resized_w, height, a=a, dim=-2, chunk_size=chunk_size
         )
 
-        # linear -> sRGB in float32; stream slice-by-slice to avoid large temporaries
         b, c, h, w = resized_linear_rgb.shape
         bytes_per_img_f32 = c * h * w * 4
         budget = (
@@ -565,7 +535,6 @@ def _lanczos_resize_core(
                     resized_linear_rgb[s:e].copy_(out_slice.to(resized_linear_rgb.dtype))
             resized_srgb = resized_linear_rgb
     else:
-        # Resample directly in sRGB (gamma-encoded) space to match FFmpeg/Pillow
         rgb_compute = rgb.to(compute_dtype)
         resized_w = resample_1d(rgb_compute, width, a=a, dim=-1, chunk_size=chunk_size)
         resized_srgb = resample_1d(
@@ -602,8 +571,9 @@ def lanczos_resize(
 ) -> torch.Tensor:
 
     """
-    Resizes a batch of images using a separable, gamma-correct Lanczos filter.
-    Handles OOM by adaptively splitting batches and backing off chunk size.
+    Adaptive facade around `_lanczos_resize_core` that enforces basic validation, consults the per-device
+    memory-profile cache, and retries with smaller batches/chunks on OOM before persisting the discovered limits.
+    Honors `TORCHLANC_VALIDATE_RANGE=1` for range checks.
     """
     global _weights_cache_dirty
 
@@ -614,7 +584,6 @@ def lanczos_resize(
     if not image_tensor.is_floating_point():
         raise ValueError("Input tensor must be floating point in [0, 1].")
 
-    # Optional range validation to avoid heavy GPU sync on hot paths.
     if os.environ.get("TORCHLANC_VALIDATE_RANGE") == "1":
         if torch.any(image_tensor < 0) or torch.any(image_tensor > 1):
             raise ValueError("Input tensor values must be in [0, 1].")
@@ -623,7 +592,6 @@ def lanczos_resize(
     _, _, input_height, input_width = image_tensor.shape
     chunk_size = _normalize_chunk_size(chunk_size, image_tensor.device)
 
-    # --- Generate Cache Key ---
     device_id = _get_device_identifier()
     cache_key = f"{device_id}::{input_height}::{input_width}::{height}::{width}::{a}::{precision}::{color_space}"
 
@@ -631,11 +599,9 @@ def lanczos_resize(
     optimal_batch_size = None
     optimal_chunk_size = None
 
-    # --- Try to load from cache ---
     if cache_key in _memory_profile_cache:
         cached_profile = _memory_profile_cache[cache_key]
         optimal_batch_size = int(cached_profile.get("optimal_batch_size", 0))
-        # v2: max_safe_chunk; v1 fallback: optimal_chunk_size
         max_safe_chunk = int(
             cached_profile.get(
                 "max_safe_chunk", cached_profile.get("optimal_chunk_size", 0)
@@ -685,7 +651,6 @@ def lanczos_resize(
                 _weights_cache_dirty = False
             return out
 
-    # --- Adaptive execution: initial full-batch attempt, then layered search on OOM ---
     try:
         resized_image = _lanczos_resize_core(
             image_tensor, height, width, a, chunk_size, clamp, precision, color_space
@@ -715,7 +680,6 @@ def lanczos_resize(
         current_batch = start_batch
         while current_batch >= 1 and found_batch == 0:
 
-            # Phase A: start from min(cached upper bound, current suggestion)
             cached_profile = _memory_profile_cache.get(cache_key, {})
             cached_bound = int(
                 cached_profile.get(
@@ -763,7 +727,6 @@ def lanczos_resize(
                 current_batch //= 2
                 continue
 
-            # Phase B: grow by ×2 to the largest safe chunk for speed
             grown = test_chunk
             for _ in range(max_chunk_retries):
                 probe = grown * 2
@@ -787,7 +750,6 @@ def lanczos_resize(
 
             found_batch = current_batch
             found_chunk = grown
-            # done with this batch size
             break
 
         if found_batch == 0:
@@ -827,11 +789,7 @@ def lanczos_resize(
 
     except Exception as e:
         logger.error(f"An unexpected error occurred during lanczos_resize: {e}")
-        raise  # Re-raise any other exceptions
-
-
-# --- Public utilities & facade ---
-
+        raise
 
 def clear_weight_cache(persist: bool = True) -> None:
     with _lanczos_cache.lock:
@@ -874,8 +832,6 @@ def set_cache_dir(path: str, reload_from_disk: bool = True) -> pathlib.Path:
 
     return _cache_dir
 
-
-# Primary facade + alias
 resize = lanczos_resize
 
 __all__ = [
