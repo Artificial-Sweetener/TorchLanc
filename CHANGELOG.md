@@ -17,6 +17,7 @@
 
 - `color_space` parameter to `lanczos_resize` to allow resampling in either `linear` (default) or `srgb` color space.
 - New benchmark options to process all images in a directory as a single batch.
+- Documented advanced environment controls (`TORCHLANC_VRAM_FRACTION`, `TORCHLANC_VALIDATE_RANGE`).
 
 ### Changed
 

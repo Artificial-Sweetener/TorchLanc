@@ -72,6 +72,15 @@ resized_srgb = lanczos_resize(my_image_batch, height=512, width=512, color_space
 | `chunk_size`    | `int` (opt)   | Controls memory chunking. Default `2048` is safe for most jobs. Set `-1` to auto-tune for maximum GPU throughput (~90% of free VRAM). |
 | `color_space`   | `str` (opt)   | `"linear"` (default) resamples in linear light with sRGB ↔ linear transforms; `"srgb"` resamples directly in sRGB to match FFmpeg/Pillow. |
 
+### **Advanced Controls**
+
+TorchLanc exposes a couple of environment variables so you can tune throughput without editing code:
+
+| Variable | Description |
+|----------|-------------|
+| `TORCHLANC_VRAM_FRACTION` | Fraction of currently free VRAM each resize pass may consume (default `0.30`). Increase it to favor fewer row chunks on large GPUs. |
+| `TORCHLANC_VALIDATE_RANGE` | Set to `1` to raise if any pixel falls outside `[0, 1]`, which is useful when validating upstream pipelines. |
+
 ## **Installation**
 
 You can install `torchlanc` using pip:
