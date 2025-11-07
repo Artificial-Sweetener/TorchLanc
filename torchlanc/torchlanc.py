@@ -319,6 +319,13 @@ def _suggest_chunk_rows(
     return max(1, min(rows_budget, hard_cap))
 
 
+def _normalize_chunk_size(chunk_size: int, device: torch.device) -> int:
+    """Ensures chunk_size is positive and picks platform defaults when unset."""
+    if chunk_size and chunk_size > 0:
+        return chunk_size
+    return 2048 if device.type == "cuda" else 65536
+
+
 # --- Gamma Correction Functions ---
 def srgb_to_linear(tensor: torch.Tensor) -> torch.Tensor:
     """Converts a tensor from sRGB to linear color space."""
@@ -490,8 +497,7 @@ def _lanczos_resize_core(
             "Input must be a 4D tensor (B, C, H, W) with 1, 3, or 4 channels."
         )
 
-    if chunk_size <= 0:
-        chunk_size = 65536 if image_tensor.device.type == "cpu" else 2048
+    chunk_size = _normalize_chunk_size(chunk_size, image_tensor.device)
 
     original_dtype = image_tensor.dtype
 
@@ -615,6 +621,7 @@ def lanczos_resize(
 
     initial_batch_size = image_tensor.shape[0]
     _, _, input_height, input_width = image_tensor.shape
+    chunk_size = _normalize_chunk_size(chunk_size, image_tensor.device)
 
     # --- Generate Cache Key ---
     device_id = _get_device_identifier()
@@ -681,7 +688,7 @@ def lanczos_resize(
     # --- Adaptive execution: initial full-batch attempt, then layered search on OOM ---
     try:
         resized_image = _lanczos_resize_core(
-            image_tensor, height, width, a, chunk_size, clamp, precision
+            image_tensor, height, width, a, chunk_size, clamp, precision, color_space
         )
         _memory_profile_cache[cache_key] = {
             "optimal_batch_size": initial_batch_size,
@@ -742,6 +749,7 @@ def lanczos_resize(
                         test_chunk,
                         clamp,
                         precision,
+                        color_space,
                     )
                     ok = True
                     break
@@ -771,6 +779,7 @@ def lanczos_resize(
                         probe,
                         clamp,
                         precision,
+                        color_space,
                     )
                     grown = probe
                 except (torch.cuda.OutOfMemoryError, torch.OutOfMemoryError):

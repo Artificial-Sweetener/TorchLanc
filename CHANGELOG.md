@@ -1,3 +1,10 @@
+# 1.1.1 (2025-11-07)
+
+### Fixed
+
+- Respects `color_space="srgb"` across the initial run and OOM probing so cached profiles and output match the requested color space.
+- Records the effective auto-selected chunk size in the memory profile cache to avoid reusing `0` and throttling subsequent resizes.
+
 # 1.1.0 (2025-10-12)
 
 ### Added
